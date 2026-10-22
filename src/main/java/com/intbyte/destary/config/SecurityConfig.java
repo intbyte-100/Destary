@@ -14,7 +14,7 @@ public class SecurityConfig {
             throws Exception {
         return http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/register", "/error").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/register", "/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(basic -> basic.disable())

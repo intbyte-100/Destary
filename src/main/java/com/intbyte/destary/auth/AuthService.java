@@ -1,5 +1,9 @@
-package com.intbyte.destary.auth.dto;
+package com.intbyte.destary.auth;
 
+import com.intbyte.destary.auth.dto.AuthResponse;
+import com.intbyte.destary.auth.dto.LoginRequest;
+import com.intbyte.destary.auth.dto.LoginResponse;
+import com.intbyte.destary.auth.dto.RegisterRequest;
 import com.intbyte.destary.user.User;
 import com.intbyte.destary.user.UserRepository;
 import org.springframework.dao.DuplicateKeyException;
@@ -10,15 +14,18 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 @Service
 public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder encoder;
+    private final JwtService jwtService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder encoder) {
+    public AuthService(UserRepository userRepository, PasswordEncoder encoder, JwtService jwtService) {
         this.userRepository = userRepository;
         this.encoder = encoder;
+        this.jwtService = jwtService;
     }
 
     @Transactional
@@ -64,5 +71,21 @@ public class AuthService {
                     "Username or email is already registered"
             );
         }
+    }
+
+    public LoginResponse login(LoginRequest request) {
+        Optional<User> userOptional = userRepository.findByUsername(request.username());
+
+        if (userOptional.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User with this username is not registered yet");
+        }
+
+        User user = userOptional.get();
+
+        if (encoder.matches(request.password(), user.passwordHash())) {
+            return new LoginResponse(jwtService.createAccessToken(user.id()), "Bearer");
+        }
+
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "The password is incorrect");
     }
 }
