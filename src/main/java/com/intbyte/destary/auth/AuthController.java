@@ -1,9 +1,6 @@
 package com.intbyte.destary.auth;
 
-import com.intbyte.destary.auth.dto.AuthResponse;
-import com.intbyte.destary.auth.dto.LoginRequest;
-import com.intbyte.destary.auth.dto.LoginResponse;
-import com.intbyte.destary.auth.dto.RegisterRequest;
+import com.intbyte.destary.auth.dto.*;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -25,7 +22,13 @@ public class AuthController {
 
     @PostMapping("/login")
     @ResponseStatus(HttpStatus.OK)
-    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/refresh")
+    @ResponseStatus(HttpStatus.OK)
+    public AuthResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return authService.refresh(request);
     }
 }

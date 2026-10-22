@@ -1,9 +1,6 @@
 package com.intbyte.destary.auth;
 
-import com.intbyte.destary.auth.dto.AuthResponse;
-import com.intbyte.destary.auth.dto.LoginRequest;
-import com.intbyte.destary.auth.dto.LoginResponse;
-import com.intbyte.destary.auth.dto.RegisterRequest;
+import com.intbyte.destary.auth.dto.*;
 import com.intbyte.destary.user.User;
 import com.intbyte.destary.user.UserRepository;
 import org.springframework.dao.DuplicateKeyException;
@@ -21,11 +18,13 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder encoder;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder encoder, JwtService jwtService) {
+    public AuthService(UserRepository userRepository, PasswordEncoder encoder, JwtService jwtService, RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.encoder = encoder;
         this.jwtService = jwtService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Transactional
@@ -62,8 +61,9 @@ public class AuthService {
 
             return new AuthResponse(
                     user.id(),
-                    user.username(),
-                    user.email()
+                    jwtService.createAccessToken(user.id()),
+                    refreshTokenService.createRefreshToken(user.id()),
+                    "Bearer"
             );
         } catch (DuplicateKeyException exception) {
             throw new ResponseStatusException(
@@ -73,7 +73,8 @@ public class AuthService {
         }
     }
 
-    public LoginResponse login(LoginRequest request) {
+    @Transactional
+    public AuthResponse login(LoginRequest request) {
         Optional<User> userOptional = userRepository.findByUsername(request.username());
 
         if (userOptional.isEmpty()) {
@@ -83,9 +84,27 @@ public class AuthService {
         User user = userOptional.get();
 
         if (encoder.matches(request.password(), user.passwordHash())) {
-            return new LoginResponse(jwtService.createAccessToken(user.id()), "Bearer");
+            return new AuthResponse(
+                    user.id(),
+                    jwtService.createAccessToken(user.id()),
+                    refreshTokenService.createRefreshToken(user.id()),
+                    "Bearer"
+            );
         }
 
         throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "The password is incorrect");
     }
+
+    @Transactional
+    public AuthResponse refresh(RefreshRequest request) {
+        RefreshResponse refreshResponse = refreshTokenService.updateRefreshToken(request.refreshToken());
+
+        return new AuthResponse(
+                refreshResponse.userId(),
+                jwtService.createAccessToken(refreshResponse.userId()),
+                refreshResponse.refreshToken(),
+                "Bearer"
+        );
+    }
+
 }
