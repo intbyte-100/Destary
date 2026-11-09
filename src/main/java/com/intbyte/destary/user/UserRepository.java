@@ -39,6 +39,18 @@ public class UserRepository {
                 """).param("username", username).query(this::mapUser).optional();
     }
 
+    public Optional<User> findById(long id) {
+        return jdbc.sql("""
+                SELECT id,
+                       username,
+                       email,
+                       password_hash,
+                       created_at
+                FROM users
+                WHERE id = :id
+                """).param("id", id).query(this::mapUser).optional();
+    }
+
     public User create(String username, String email, String passwordHash) {
         return jdbc.sql("""
                 INSERT INTO users (username, email, password_hash)
