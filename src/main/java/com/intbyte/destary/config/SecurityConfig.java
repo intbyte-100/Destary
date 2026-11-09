@@ -2,7 +2,9 @@ package com.intbyte.destary.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -17,9 +19,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/error").permitAll()
                         .anyRequest().authenticated()
                 )
-                .httpBasic(basic -> basic.disable())
-                .formLogin(form -> form.disable())
-                .csrf(csrf -> csrf.disable())
+                .oauth2ResourceServer(oauth2 ->
+                        oauth2.jwt(Customizer.withDefaults())
+                )
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .csrf(AbstractHttpConfigurer::disable)
                 .build();
     }
 

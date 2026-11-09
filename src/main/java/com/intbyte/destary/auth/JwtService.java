@@ -1,10 +1,7 @@
 package com.intbyte.destary.auth;
 
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -12,9 +9,11 @@ import java.time.Instant;
 @Service
 public class JwtService {
     private final JwtEncoder encoder;
+    private final JwtDecoder decoder;
 
-    public JwtService(JwtEncoder encoder) {
+    public JwtService(JwtEncoder encoder, JwtDecoder decoder) {
         this.encoder = encoder;
+        this.decoder = decoder;
     }
 
     public String createAccessToken(long userId) {
@@ -31,5 +30,19 @@ public class JwtService {
         return encoder.encode(
                 JwtEncoderParameters.from(header, claims)
         ).getTokenValue();
+    }
+
+    public boolean isValid(String token) {
+        try {
+            decoder.decode(token);
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    public long extractUserId(String token) {
+        Jwt jwt = decoder.decode(token);
+        return Long.parseLong(jwt.getSubject());
     }
 }
