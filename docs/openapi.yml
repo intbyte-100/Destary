@@ -1,0 +1,435 @@
+openapi: 3.0.3
+info:
+  title: Destary REST API
+  version: 1.0.0
+  description: |
+    REST API for authentication, user profiles, and posts in the Destary service.
+
+    ## Token model
+    - **Access token** — JWT (HS256), lifetime 15 minutes. Sent in the
+      `Authorization: Bearer <accessToken>` header for access to protected endpoints.
+    - **Refresh token** — opaque token (32 random bytes, base64url), lifetime 15 days.
+      Only its SHA-256 hash is stored in the database. When used at `/refresh`,
+      the old refresh token is invalidated (deleted) and a new token pair is issued.
+
+    ## Errors
+    Errors are returned via Spring `ResponseStatusException` / `ProblemDetail`.
+    The body contains at least a `detail` field with a human-readable message.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Registration, login, and token refresh
+  - name: User
+    description: Current user profile
+  - name: Posts
+    description: Creating and reading posts
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      description: |
+        Creates a user and immediately returns a token pair (access + refresh).
+        The password is hashed with BCrypt (cost 12); its UTF-8 length must not
+        exceed 72 bytes.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: |
+            Invalid request payload. In particular, the password exceeds 72 bytes
+            in UTF-8, or `@Valid` field validation fails.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: |
+            Conflict: `username` is already taken, `email` is already registered,
+            or both (concurrent insert caught at the database level).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with username and password
+      description: Verifies the password and returns a new token pair.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request payload
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          description: |
+            Invalid credentials. Possible messages:
+            `User with this username is not registered yet` or
+            `The password is incorrect`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh a token pair using a refresh token
+      description: |
+        Looks up the refresh token by SHA-256 hash in the database, verifies that
+        it has not expired and has not been revoked. On success, **deletes the old
+        refresh token** (rotation) and returns a new access + refresh pair.
+      operationId: refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request payload
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          description: |
+            The refresh token has expired or been revoked
+            (message: `The refresh token was expired or revoked`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/user/me:
+    get:
+      tags: [User]
+      summary: Get the current user's profile
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/post:
+    post:
+      tags: [Posts]
+      summary: Create a post
+      description: Creates a post owned by the authenticated user.
+      operationId: createPost
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostRequest'
+      responses:
+        '201':
+          description: Post successfully created
+          headers:
+            Location:
+              description: URL returned by the service for the created post.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/post/{postId}:
+    get:
+      tags: [Posts]
+      summary: Get a post by ID
+      operationId: getPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          description: Post identifier.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: Post
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/users/{userId}/posts:
+    get:
+      tags: [Posts]
+      summary: Get a user's post by index
+      description: Returns one post by zero-based index, newest first (ties are broken by descending ID).
+      operationId: getUserPostByIndex
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: index
+          in: query
+          required: true
+          description: Post index for the specified user.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '200':
+          description: Post
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          description: Index is negative or invalid.
+
+  /api/users/{userId}/posts/count:
+    get:
+      tags: [Posts]
+      summary: Get the number of a user's posts
+      operationId: getUserPostCount
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Number of posts (zero if none exist).
+          content:
+            application/json:
+              schema:
+                type: integer
+                format: int64
+                minimum: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Access token issued by `/api/auth/login`, `/api/auth/register`,
+        or `/api/auth/refresh`.
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          description: Unique username.
+          example: alice
+        email:
+          type: string
+          format: email
+          description: Unique email address.
+          example: alice@example.com
+        password:
+          type: string
+          format: password
+          description: |
+            Password. Maximum length is **72 bytes in UTF-8** (BCrypt limit);
+            exceeding it results in 400 Bad Request.
+          example: s3cretP@ss
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: alice
+        password:
+          type: string
+          format: password
+          example: s3cretP@ss
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          description: |
+            Opaque refresh token previously issued to the client
+            (base64url, 32 random bytes).
+          example: 3f8Kc2hXq7bN1wZ9tY4vR0sA5uL6mP8oQ2jE9dG1vB0
+
+    AuthResponse:
+      type: object
+      required: [userId, accessToken, refreshToken, tokenType]
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: User ID.
+          example: 42
+        accessToken:
+          type: string
+          description: JWT access token (HS256, 15-minute TTL).
+          example: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI0MiJ9...
+        refreshToken:
+          type: string
+          description: Opaque refresh token (15-day TTL).
+          example: 3f8Kc2hXq7bN1wZ9tY4vR0sA5uL6mP8oQ2jE9dG1vB0
+        tokenType:
+          type: string
+          description: Token type used in the `Authorization` header.
+          enum: [Bearer]
+          example: Bearer
+
+    MeResponse:
+      type: object
+      required: [username, email]
+      properties:
+        username:
+          type: string
+          example: alice
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+
+    CreatePostRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          maxLength: 64
+          description: Post text. The database limits this value to 64 characters.
+          example: Hello, Destary!
+
+    PostResponse:
+      type: object
+      required: [id, userId, content, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 17
+        userId:
+          type: integer
+          format: int64
+          example: 42
+        content:
+          type: string
+          example: Hello, Destary!
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-11-16T12:00:00Z'
+
+    ProblemDetail:
+      type: object
+      description: Error payload (RFC 7807 / Spring `ProblemDetail`).
+      properties:
+        type:
+          type: string
+          format: uri
+          example: about:blank
+        title:
+          type: string
+          example: Unauthorized
+        status:
+          type: integer
+          example: 401
+        detail:
+          type: string
+          example: The refresh token was expired or revoked
+        instance:
+          type: string
+          format: uri
+          example: /api/auth/refresh
+
+  responses:
+    Unauthorized:
+      description: Missing, invalid, or expired access token.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NotFound:
+      description: The requested post does not exist.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
