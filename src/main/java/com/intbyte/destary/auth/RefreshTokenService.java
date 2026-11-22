@@ -1,14 +1,14 @@
 package com.intbyte.destary.auth;
 
 import com.intbyte.destary.auth.dto.RefreshResponse;
+import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Optional;
-
 @Service
 public class RefreshTokenService {
+
     private final RefreshTokenRepository repository;
 
     public RefreshTokenService(RefreshTokenRepository repository) {
@@ -23,18 +23,25 @@ public class RefreshTokenService {
     }
 
     public RefreshResponse updateRefreshToken(String oldToken) {
-        Optional<RefreshToken> tokenOptional = repository.findByHash(TokenHasher.sha256(oldToken));
+        Optional<RefreshToken> tokenOptional = repository.findByHash(
+            TokenHasher.sha256(oldToken)
+        );
 
-        System.out.println(tokenOptional);
-        if (tokenOptional.map((it) -> !it.isActive()).orElse(true)) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "The refresh token was expired or revoked");
+        if (
+            tokenOptional.map(it -> !it.isActive()).orElse(true) ||
+            !repository.deleteById(tokenOptional.get().id())
+        ) {
+            throw new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED,
+                "The refresh token was expired or revoked"
+            );
         }
 
         RefreshToken token = tokenOptional.get();
-        repository.deleteById(token.id());
 
-        return new RefreshResponse(token.userId(), createRefreshToken(token.userId()));
+        return new RefreshResponse(
+            token.userId(),
+            createRefreshToken(token.userId())
+        );
     }
-
-
 }
