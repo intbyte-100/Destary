@@ -1,0 +1,10 @@
+{
+  "lsp": {
+    "jdtls": {
+      "binary": {
+        "path": "/usr/bin/jdtls",
+        "arguments": ["--java-executable", "/usr/lib/jvm/java-25-openjdk/bin/java"]
+      }
+    }
+  }
+}
