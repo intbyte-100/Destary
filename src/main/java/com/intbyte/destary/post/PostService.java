@@ -40,4 +40,15 @@ public class PostService {
     public long getUserPostAmount(long userId) {
         return repository.getAmountOfUserPosts(userId);
     }
+
+    public Post updatePost(long postId, long userId, CreatePostRequest request) {
+        return repository.updateOwnedPost(postId, userId, request.content())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
+    public void deletePost(long postId, long userId) {
+        if (repository.deleteOwnedPost(postId, userId) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+    }
 }

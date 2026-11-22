@@ -53,4 +53,15 @@ public class PostRepository {
                 .query(this::mapPost)
                 .single();
     }
+
+    public Optional<Post> updateOwnedPost(long postId, long userId, String content) {
+        return client.sql("UPDATE posts SET content = :content WHERE id = :id AND user_id = :userId RETURNING id, user_id, content, created_at")
+                .param("id", postId).param("userId", userId).param("content", content)
+                .query(this::mapPost).optional();
+    }
+
+    public int deleteOwnedPost(long postId, long userId) {
+        return client.sql("DELETE FROM posts WHERE id = :id AND user_id = :userId")
+                .param("id", postId).param("userId", userId).update();
+    }
 }

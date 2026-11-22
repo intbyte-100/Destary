@@ -157,6 +157,32 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/users/{userId}:
+    get:
+      tags: [User]
+      summary: Get a user's public profile
+      operationId: getPublicUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Public profile (email is not included).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User not found.
+
   /api/post:
     post:
       tags: [Posts]
@@ -214,6 +240,58 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Posts]
+      summary: Replace the text of an owned post
+      operationId: updatePost
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostRequest'
+      responses:
+        '200':
+          description: Updated post.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '400':
+          description: Invalid content.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Post does not exist or is not owned by the current user.
+    delete:
+      tags: [Posts]
+      summary: Delete an owned post
+      operationId: deletePost
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Post deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Post does not exist or is not owned by the current user.
 
   /api/users/{userId}/posts:
     get:
@@ -289,6 +367,19 @@ components:
         or `/api/auth/refresh`.
 
   schemas:
+    PublicUserResponse:
+      type: object
+      required: [id, username, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
     RegisterRequest:
       type: object
       required: [username, email, password]
@@ -375,7 +466,7 @@ components:
         content:
           type: string
           maxLength: 64
-          description: Post text. The database limits this value to 64 characters.
+          description: Non-blank post text, at most 64 UTF-16 code units.
           example: Hello, Destary!
 
     PostResponse:
